@@ -1,0 +1,70 @@
+# ============================================================
+# Prometheus Alert Rules — Churn Prediction API
+# ============================================================
+
+groups:
+  - name: churn_api_alerts
+    rules:
+
+      # API is down
+      - alert: ChurnAPIDown
+        expr: up{job="churn_prediction_api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Churn Prediction API is down"
+          description: "The churn prediction service has been unreachable for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{job="churn_prediction_api", status=~"5.."}[5m])
+          /
+          rate(http_requests_total{job="churn_prediction_api"}[5m])
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on Churn API"
+          description: "Error rate is {{ $value | humanizePercentage }} over last 5 minutes."
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket{job="churn_prediction_api"}[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency exceeds 1 second"
+          description: "95th percentile response time is {{ $value }}s — check model load or resource constraints."
+
+      # Model not loaded
+      - alert: ModelNotLoaded
+        expr: churn_model_loaded{job="churn_prediction_api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Churn prediction model is not loaded"
+          description: "The API started but the ML model failed to load. Run train_pipeline.py."
+
+      # Prediction drift — churn rate deviating significantly from baseline
+      - alert: PredictionDrift
+        expr: |
+          abs(
+            rate(churn_predictions_total{prediction="1"}[1h])
+            /
+            rate(churn_predictions_total[1h])
+            - 0.265   # Expected churn rate baseline
+          ) > 0.10
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prediction drift detected"
+          description: "Churn prediction rate has deviated >10% from expected baseline — possible data drift."

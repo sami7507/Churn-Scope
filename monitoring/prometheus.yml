@@ -1,0 +1,37 @@
+# ============================================================
+# Prometheus Scrape Configuration
+# For monitoring the Churn Prediction API
+# ============================================================
+
+global:
+  scrape_interval: 15s       # Scrape every 15 seconds
+  evaluation_interval: 15s   # Evaluate rules every 15 seconds
+  scrape_timeout: 10s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Scrape the Churn Prediction FastAPI app
+  # Requires prometheus-fastapi-instrumentator or similar middleware
+  - job_name: "churn_prediction_api"
+    static_configs:
+      - targets: ["churn-api:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s
+
+  # System metrics via node_exporter (optional)
+  # - job_name: "node_exporter"
+  #   static_configs:
+  #     - targets: ["node-exporter:9100"]

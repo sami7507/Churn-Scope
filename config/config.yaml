@@ -1,0 +1,141 @@
+# ============================================================
+# Customer Churn Prediction System - Central Configuration
+# ============================================================
+
+project:
+  name: "churn_prediction"
+  version: "1.0.0"
+  description: "End-to-end customer churn prediction system"
+
+# ---- Data Paths ----
+paths:
+  raw_data: "data/raw/telco_churn.csv"
+  processed_data: "data/processed/"
+  features_data: "data/features/"
+  model_dir: "models/trained/"
+  artifact_dir: "models/artifacts/"
+  registry: "models/registry/model_registry.json"
+  logs: "logs/"
+
+# ---- Data Schema ----
+data:
+  target_column: "Churn"
+  customer_id_column: "customerID"
+
+  numeric_features:
+    - "tenure"
+    - "MonthlyCharges"
+    - "TotalCharges"
+
+  categorical_features:
+    - "gender"
+    - "Partner"
+    - "Dependents"
+    - "PhoneService"
+    - "MultipleLines"
+    - "InternetService"
+    - "OnlineSecurity"
+    - "OnlineBackup"
+    - "DeviceProtection"
+    - "TechSupport"
+    - "StreamingTV"
+    - "StreamingMovies"
+    - "Contract"
+    - "PaperlessBilling"
+    - "PaymentMethod"
+    - "SeniorCitizen"
+
+  ordinal_features: []
+
+  test_size: 0.2
+  val_size: 0.1
+  random_state: 42
+  stratify: true
+
+# ---- Feature Engineering ----
+feature_engineering:
+  create_tenure_bands: true
+  create_charge_ratios: true
+  create_interaction_features: true
+  create_service_count: true
+
+# ---- Model Configuration ----
+model:
+  algorithm: "lightgbm"   # Options: "lightgbm", "xgboost"
+  version: "v1"
+
+  lightgbm_params:
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 0.1
+    class_weight: "balanced"
+    random_state: 42
+    n_jobs: -1
+
+  xgboost_params:
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 6
+    min_child_weight: 5
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    scale_pos_weight: 3
+    use_label_encoder: false
+    eval_metric: "logloss"
+    random_state: 42
+    n_jobs: -1
+
+  cross_validation:
+    n_splits: 5
+    scoring: "roc_auc"
+
+  early_stopping:
+    enabled: true
+    rounds: 50
+
+# ---- Optuna Hyperparameter Search ----
+optuna:
+  enabled: false          # Set true to run full HPO (slower)
+  n_trials: 50
+  timeout: 600            # seconds
+  direction: "maximize"
+  metric: "roc_auc"
+
+# ---- Threshold Optimization ----
+threshold:
+  default: 0.5
+  optimize: true
+  strategy: "f1"          # Options: "f1", "precision", "recall", "custom_cost"
+  # Custom cost matrix (used if strategy = "custom_cost")
+  cost_matrix:
+    fn_cost: 5            # Cost of missing a churner (false negative)
+    fp_cost: 1            # Cost of wrong retention offer (false positive)
+
+# ---- API Configuration ----
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 2
+  reload: false
+  title: "Churn Prediction API"
+  description: "Production-grade ML API for customer churn prediction"
+  version: "1.0.0"
+  docs_url: "/docs"
+  model_version: "v1"
+  max_batch_size: 1000
+
+# ---- Logging ----
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+  file: "logs/churn_prediction.log"
+  max_bytes: 10485760    # 10 MB
+  backup_count: 5
