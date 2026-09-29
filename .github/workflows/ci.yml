@@ -1,8 +1,3 @@
-# ============================================================
-# CI/CD Pipeline — Customer Churn Prediction System
-# Runs on every push to main and every pull request
-# ============================================================
-
 name: CI / CD Pipeline
 
 on:
@@ -13,225 +8,86 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  DOCKER_IMAGE: churn-prediction
-  REGISTRY: ghcr.io
+  DOCKER_IMAGE: churnscope
 
 jobs:
-  # ── Job 1: Code Quality ───────────────────────────────────────────────
   lint:
     name: Lint & Format Check
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Cache pip
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}"}
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles("requirements.txt") }}
+      - run: pip install ruff
+      - run: ruff check src/ api/ tests/ train_pipeline.py predict.py
+      - run: ruff format --check src/ api/ tests/
 
-      - name: Install linting tools
-        run: pip install ruff
-
-      - name: Run Ruff linter
-        run: ruff check src/ api/ tests/ train_pipeline.py predict.py
-
-      - name: Run Ruff formatter check
-        run: ruff format --check src/ api/ tests/
-
-  # ── Job 2: Unit & Integration Tests ──────────────────────────────────
   test:
     name: Tests
     runs-on: ubuntu-latest
     needs: lint
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Cache pip
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ env.PYTHON_VERSION }}"}
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles("requirements.txt") }}
+      - run: pip install --upgrade pip && pip install -r requirements.txt pytest pytest-asyncio httpx pytest-cov
+      - run: mkdir -p data/raw data/processed data/features models/trained models/artifacts models/registry logs
+      - run: python train_pipeline.py --synthetic --n-samples 2000
+      - run: pytest tests/ -v --cov=src --cov=api --cov-report=xml --cov-report=term-missing -x
+      - uses: codecov/codecov-action@v4
+        with: {file: ./coverage.xml, fail_ci_if_error: false}
 
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx pytest-cov
-
-      - name: Create required directories
-        run: |
-          mkdir -p data/raw data/processed data/features
-          mkdir -p models/trained models/artifacts models/registry
-          mkdir -p logs
-
-      - name: Train model (synthetic data for CI)
-        run: python train_pipeline.py --synthetic --n-samples 2000
-
-      - name: Run unit tests
-        run: |
-          pytest tests/ -v \
-            --cov=src \
-            --cov=api \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            -x
-
-      - name: Upload coverage report
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          fail_ci_if_error: false
-
-  # ── Job 3: Docker Build ───────────────────────────────────────────────
   docker-build:
     name: Docker Build & Smoke Test
     runs-on: ubuntu-latest
     needs: test
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker build --target production --tag ${{ env.DOCKER_IMAGE }}:ci-${{ github.sha }} .
+      - run: mkdir -p models/trained models/artifacts models/registry data/raw logs && python train_pipeline.py --synthetic --n-samples 1000
+      - name: Smoke test
         run: |
-          docker build \
-            --target production \
-            --tag ${{ env.DOCKER_IMAGE }}:ci-${{ github.sha }} \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
-            .
-
-      - name: Train model for container test
-        run: |
-          mkdir -p models/trained models/artifacts models/registry data/raw logs
-          python train_pipeline.py --synthetic --n-samples 1000
-
-      - name: Smoke test — run API container
-        run: |
-          docker run -d \
-            --name churn-api-test \
-            -p 8000:8000 \
-            -v $(pwd)/models:/app/models \
-            -v $(pwd)/logs:/app/logs \
-            ${{ env.DOCKER_IMAGE }}:ci-${{ github.sha }}
-
-          # Wait for startup
+          docker run -d --name churnscope-test -p 8000:8000 -v $(pwd)/models:/app/models -v $(pwd)/logs:/app/logs ${{ env.DOCKER_IMAGE }}:ci-${{ github.sha }}
           sleep 15
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
+          [ "$STATUS" = "200" ] && echo "PASSED" || (echo "FAILED" && exit 1)
+      - if: always()
+        run: docker rm -f churnscope-test || true
 
-          # Health check
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
-          echo "Health check HTTP status: $HTTP_STATUS"
-          [ "$HTTP_STATUS" = "200" ] && echo "Health check PASSED" || (echo "Health check FAILED" && exit 1)
-
-          # Predict endpoint
-          PRED_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST http://localhost:8000/predict \
-            -H "Content-Type: application/json" \
-            -d '{
-              "gender":"Female","SeniorCitizen":"0","Partner":"No","Dependents":"No",
-              "tenure":3,"PhoneService":"Yes","MultipleLines":"No",
-              "InternetService":"Fiber optic","OnlineSecurity":"No","OnlineBackup":"No",
-              "DeviceProtection":"No","TechSupport":"No","StreamingTV":"Yes",
-              "StreamingMovies":"Yes","Contract":"Month-to-month","PaperlessBilling":"Yes",
-              "PaymentMethod":"Electronic check","MonthlyCharges":95.5,"TotalCharges":286.5
-            }')
-          echo "Predict HTTP status: $PRED_STATUS"
-          [ "$PRED_STATUS" = "200" ] && echo "Predict endpoint PASSED" || (echo "Predict endpoint FAILED" && exit 1)
-
-      - name: Container cleanup
-        if: always()
-        run: docker rm -f churn-api-test || true
-
-  # ── Job 4: Push to Registry (main branch only) ────────────────────────
   publish:
     name: Publish Docker Image
     runs-on: ubuntu-latest
     needs: docker-build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    permissions:
-      contents: read
-      packages: write
-
+    if: github.ref == "refs/heads/main" && github.event_name == "push"
+    permissions: {contents: read, packages: write}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.DOCKER_IMAGE }}
+          images: ghcr.io/${{ github.repository }}/churnscope
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v5
+      - uses: docker/build-push-action@v5
         with:
           context: .
           target: production
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ── Job 5: Deploy to Cloud (main branch only) ─────────────────────────
-  # Uncomment and configure for your cloud provider:
-
-  # deploy-gcp:
-  #   name: Deploy to Cloud Run
-  #   runs-on: ubuntu-latest
-  #   needs: publish
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #     - uses: google-github-actions/auth@v2
-  #       with:
-  #         credentials_json: ${{ secrets.GCP_SA_KEY }}
-  #     - uses: google-github-actions/deploy-cloudrun@v2
-  #       with:
-  #         service: churn-prediction
-  #         image: ${{ env.REGISTRY }}/${{ github.repository }}/churn-prediction:latest
-  #         region: us-central1
-  #         flags: --memory=2Gi --cpu=2 --max-instances=10
-
-  # deploy-aws:
-  #   name: Deploy to ECS
-  #   runs-on: ubuntu-latest
-  #   needs: publish
-  #   if: github.ref == 'refs/heads/main'
-  #   steps:
-  #     - name: Deploy to Amazon ECS
-  #       uses: aws-actions/amazon-ecs-deploy-task-definition@v1
-  #       with:
-  #         task-definition: ecs-task-def.json
-  #         service: churn-prediction-service
-  #         cluster: churn-prediction-cluster
-  #         wait-for-service-stability: true
