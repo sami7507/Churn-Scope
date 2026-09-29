@@ -1,75 +1,14 @@
-# ============================================================
-# .dockerignore — Keeps Docker build context lean and fast
-# ============================================================
-
-# Version control
-.git/
-.gitignore
-.github/
-
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-
-# Virtual environments
-.venv/
-venv/
-env/
-
-# Development tools
-.ruff_cache/
-.pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
-
-# Jupyter / notebooks
-notebooks/
-*.ipynb
-.ipynb_checkpoints/
-
-# Docs
-README.md
-docs/
-
-# Monitoring config (mounted separately in compose)
+.git/ .gitignore .github/
+__pycache__/ *.pyc *.pyo *.pyd *.so .Python *.egg-info/ dist/ build/
+.venv/ venv/ env/
+.ruff_cache/ .pytest_cache/ .coverage coverage.xml htmlcov/
+notebooks/ *.ipynb .ipynb_checkpoints/
+README.md docs/
 monitoring/
-
-# Environment files
-.env
-.env.*
-!.env.example
-
-# Large data files (mount as volume at runtime)
-data/raw/
-data/processed/
-data/features/
-
-# Logs (mount as volume)
+.env .env.* !.env.example
+data/raw/ data/processed/ data/features/
 logs/
-
-# Results
 results/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Scripts
-scripts/
-
-# Tests (not needed in production image)
 tests/
-
-# Temp
-*.tmp
-*.bak
-tmp/
+scripts/
+*.tmp *.bak tmp/
