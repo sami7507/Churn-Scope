@@ -1,99 +1,21 @@
-# ============================================================
-# .gitignore — Customer Churn Prediction System
-# ============================================================
-
-# ── Python ─────────────────────────────────────────────────
+# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
-.eggs/
-*.egg
-pip-wheel-metadata/
-
-# ── Virtual environments ────────────────────────────────────
-.venv/
-venv/
-env/
-ENV/
-.conda/
-
-# ── ML Artifacts (large binary files — use DVC or S3) ──────
+*.pyc *.pyo *.pyd .Python *.egg-info/ dist/ build/
+# Environments
+.venv/ venv/ env/
+# Large model binaries (use Git LFS or cloud storage)
 models/trained/*.joblib
-models/trained/*.pkl
-models/artifacts/*.joblib
-models/artifacts/*.pkl
-# Keep evaluation_results.json and model_registry.json in VCS
+models/artifacts/preprocessing_pipeline.joblib
+# Keep evaluation results and registry
 !models/artifacts/evaluation_results.json
 !models/registry/model_registry.json
-
-# ── Data files (large — use DVC or cloud storage) ──────────
+# Data
 data/raw/*.csv
-data/raw/*.parquet
-data/processed/
-data/features/
-# Exception: keep schema/sample files if small
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/features/.gitkeep
-
-# ── Logs ───────────────────────────────────────────────────
-logs/
-*.log
-*.log.*
-
-# ── Results ────────────────────────────────────────────────
-results/
-notebooks/plots/
-
-# ── Environment variables ───────────────────────────────────
-.env
-.env.local
-.env.production
-# Keep .env.example in VCS
-!.env.example
-
-# ── IDE / Editor ───────────────────────────────────────────
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# ── Jupyter ─────────────────────────────────────────────────
-.ipynb_checkpoints/
-*.ipynb
-
-# ── Testing ─────────────────────────────────────────────────
-.pytest_cache/
-.coverage
-coverage.xml
-htmlcov/
-
-# ── Docker ──────────────────────────────────────────────────
-.docker/
-
-# ── OS ──────────────────────────────────────────────────────
-.DS_Store
-*.DS_Store
-
-# ── Optuna ──────────────────────────────────────────────────
-optuna.db
-optuna_journal.log
-
-# ── MLflow ──────────────────────────────────────────────────
-mlruns/
-mlartifacts/
-
-# ── Temp ───────────────────────────────────────────────────
-*.tmp
-*.bak
-*.swp
-tmp/
-temp/
+data/processed/ data/features/
+# Logs and results
+logs/ results/ *.log
+# Dev
+.ruff_cache/ .pytest_cache/ .coverage coverage.xml htmlcov/
+.idea/ .vscode/ *.swp .DS_Store
+.ipynb_checkpoints/ *.ipynb
+.env .env.* !.env.example
