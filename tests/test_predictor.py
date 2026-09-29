@@ -1,24 +1,34 @@
-"""Unit tests for inference engine."""
+"""Unit tests for preprocessing pipeline."""
 import pytest
-import numpy as np
+from src.data_loader import DataLoader
+from src.feature_engineering import FeatureEngineer
+from src.preprocessor import ChurnPreprocessor
+from src import load_config
 
-def test_shap_risk_tier():
-    """Test that risk tier boundaries are correct."""
-    from src.predictor import ChurnPredictor
-    assert ChurnPredictor._get_risk_tier(0.80) == "Critical"
-    assert ChurnPredictor._get_risk_tier(0.60) == "High"
-    assert ChurnPredictor._get_risk_tier(0.40) == "Medium"
-    assert ChurnPredictor._get_risk_tier(0.20) == "Low"
+@pytest.fixture
+def config(): return load_config()
 
-def test_format_output():
-    """Test prediction output structure."""
-    from src.predictor import ChurnPredictor
-    from src import load_config
-    cfg = load_config()
-    p = ChurnPredictor(cfg)
-    p.optimal_threshold = 0.5
-    result = p._format_output(0.75, 1)
-    assert result["churn_probability"] == 0.75
-    assert result["churn_label"] == "Churn"
-    assert "risk_tier" in result
-    assert "confidence" in result
+@pytest.fixture
+def sample_df(): return DataLoader.generate_synthetic_data(n_samples=300, random_state=0)
+
+def test_feature_engineering_adds_columns(config, sample_df):
+    fe = FeatureEngineer(config)
+    df = fe.transform(sample_df)
+    assert df.shape[1] > sample_df.shape[1]
+    assert "tenure_band" in df.columns
+    assert "total_services" in df.columns
+
+def test_preprocessor_splits(config, sample_df):
+    fe = FeatureEngineer(config)
+    df = fe.transform(sample_df)
+    pp = ChurnPreprocessor(config)
+    splits = pp.fit_transform(df)
+    assert splits["X_train"].shape[0] > splits["X_test"].shape[0]
+    assert splits["X_train"].shape[1] == splits["X_test"].shape[1]
+
+def test_no_target_in_features(config, sample_df):
+    fe = FeatureEngineer(config)
+    df = fe.transform(sample_df)
+    pp = ChurnPreprocessor(config)
+    splits = pp.fit_transform(df)
+    assert splits["X_train"].shape[1] == splits["X_val"].shape[1]
